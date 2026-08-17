@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+      font-size: 13px;
+      color: #202124;
+      margin: 0;
+      padding: 14px;
+    }
+    p.hint {
+      color: #5f6368;
+      font-size: 12px;
+      margin: 0 0 10px 0;
+    }
+    .presets {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .presets button {
+      font-size: 12px;
+      padding: 4px 10px;
+      border: 1px solid #dadce0;
+      background: #f8f9fa;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+    .presets button:hover {
+      background: #e8eaed;
+    }
+    #status {
+      min-height: 16px;
+      font-size: 12px;
+      color: #5f6368;
+      margin-bottom: 6px;
+    }
+    #status.error { color: #c5221f; }
+    #status.success { color: #188038; }
+    #fields {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 12px;
+    }
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid #f1f3f4;
+    }
+    .field-row:last-child { border-bottom: none; }
+    .field-row label {
+      cursor: pointer;
+      flex: 1;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .actions button {
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #applyBtn {
+      background: #1a73e8;
+      color: white;
+      border: none;
+    }
+    #applyBtn:hover { background: #1765cc; }
+    #closeBtn {
+      background: white;
+      border: 1px solid #dadce0;
+      color: #202124;
+    }
+  </style>
+</head>
+<body>
+  <p class="hint">Checked columns stay visible. Unchecked columns are hidden from the sheet (data isn't deleted -- just hidden).</p>
+
+  <div class="presets" id="presets"></div>
+
+  <div id="status"></div>
+  <div id="fields">Loading...</div>
+
+  <div class="actions">
+    <button id="closeBtn">Close</button>
+    <button id="applyBtn">Apply</button>
+  </div>
+
+  <script>
+    var fieldsEl = document.getElementById('fields');
+    var presetsEl = document.getElementById('presets');
+    var statusEl = document.getElementById('status');
+
+    function setStatus(msg, kind) {
+      statusEl.textContent = msg || '';
+      statusEl.className = kind || '';
+    }
+
+    function renderFields(fields) {
+      fieldsEl.innerHTML = '';
+      fields.forEach(function (f) {
+        var row = document.createElement('div');
+        row.className = 'field-row';
+
+        var safeId = 'field-' + f.field.replace(/[^a-zA-Z0-9]+/g, '-');
+
+        var checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = safeId;
+        checkbox.dataset.field = f.field;
+        checkbox.checked = !f.hidden;
+
+        var label = document.createElement('label');
+        label.setAttribute('for', safeId);
+        label.textContent = f.field;
+
+        row.appendChild(checkbox);
+        row.appendChild(label);
+        fieldsEl.appendChild(row);
+      });
+    }
+
+    function renderPresets(presetNames) {
+      presetsEl.innerHTML = '';
+      presetNames.forEach(function (name) {
+        var btn = document.createElement('button');
+        btn.textContent = name;
+        btn.addEventListener('click', function () {
+          setStatus('Applying "' + name + '"...');
+          google.script.run
+            .withSuccessHandler(function (state) {
+              renderFields(state.fields);
+              setStatus('Applied "' + name + '".', 'success');
+            })
+            .withFailureHandler(function (err) {
+              setStatus(err.message || 'Could not apply preset.', 'error');
+            })
+            .applyColumnPreset(name);
+        });
+        presetsEl.appendChild(btn);
+      });
+    }
+
+    google.script.run
+      .withSuccessHandler(function (state) {
+        renderFields(state.fields);
+        renderPresets(state.presets);
+      })
+      .withFailureHandler(function (err) {
+        setStatus(err.message || 'Could not load columns.', 'error');
+        fieldsEl.textContent = '';
+      })
+      .getColumnVisibilityState();
+
+    document.getElementById('applyBtn').addEventListener('click', function () {
+      var checkboxes = fieldsEl.querySelectorAll('input[type="checkbox"]');
+      var hiddenFields = [];
+      checkboxes.forEach(function (cb) {
+        if (!cb.checked) hiddenFields.push(cb.dataset.field);
+      });
+      setStatus('Applying...');
+      google.script.run
+        .withSuccessHandler(function (state) {
+          renderFields(state.fields);
+          setStatus('Applied.', 'success');
+        })
+        .withFailureHandler(function (err) {
+          setStatus(err.message || 'Could not apply changes.', 'error');
+        })
+        .applyColumnVisibility(hiddenFields);
+    });
+
+    document.getElementById('closeBtn').addEventListener('click', function () {
+      google.script.host.close();
+    });
+  </script>
+</body>
+</html>
