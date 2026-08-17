@@ -1,6 +1,6 @@
 # Reference Database
 
-A Google Sheets + Apps Script tool that syncs your reference library into a spreadsheet, automatically creates Google Docs for each reference, and lets you edit notes that sync back into the sheet.
+A Google Sheets + Apps Script tool that syncs your reference library into a spreadsheet, automatically creates Google Docs for each reference, and lets you edit notes that sync back into the sheet. This was designed to be quite similar to a Notion database, but since teamspaces have free-tier limits, I made something similar, but in Google Sheets so that collaboration is still viable.
 
 **Template:** https://docs.google.com/spreadsheets/d/1Vt1OyLrniMwJVqdyX9dizRBKMi0jiOr9CvDs5ytEt6M/edit?usp=sharing
 
