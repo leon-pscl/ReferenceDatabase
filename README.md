@@ -15,6 +15,10 @@ A Google Sheets + Apps Script tool that syncs your reference library into a spre
 
 ---
 
+## Video Demo
+
+[![Video Demo](https://img.youtube.com/vi/8mmi5fBXqrU/0.jpg)](https://youtu.be/8mmi5fBXqrU)
+
 ## Initial Setup
 
 ### 1. Duplicate the template
