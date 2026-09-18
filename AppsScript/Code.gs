@@ -12,7 +12,7 @@
  *      Sidebar.html as a second file (HTML type)
  *   2. Project Settings > Script Properties, add:
  *        ZOTERO_API_KEY   = your personal Zotero API key
- *        ZOTERO_GROUP_ID  = the numeric group library ID
+ *        ZOTERO_GROUP_ID  = (optional) group library ID for full sync; omit to import manually via sidebar
  *        DOCS_FOLDER_ID   = (optional) Drive folder ID where new Docs are created
  *   3. Run `setupSheet` once to write the header row
  *   4. Run `runFullSync` once manually to test, grant permissions when prompted
@@ -38,8 +38,7 @@ const HEADERS = [
   'Problem',
   'Current Solution',
   'Lacking in Current Solution',
-  'Comments - researcher(s)',
-  'Comments - adviser',
+  'Comments',
   'Added By',
   'Status',
   'Item Type',
@@ -74,8 +73,7 @@ const MANUAL_COLUMNS = [
   'Problem',
   'Current Solution',
   'Lacking in Current Solution',
-  'Comments - researcher(s)',
-  'Comments - adviser',
+  'Comments',
   'In-Text Citation',
 ];
 
@@ -85,8 +83,7 @@ const DOC_SYNCED_FIELDS = [
   'Problem',
   'Current Solution',
   'Lacking in Current Solution',
-  'Comments - researcher(s)',
-  'Comments - adviser',
+  'Comments',
 ];
 
 const CITATION_STYLE = 'apa'; // any style id Zotero supports, e.g. 'apa', 'mla', 'chicago-note-bibliography'
@@ -249,8 +246,12 @@ function reorderColumnsToCanonicalOrder() {
 
 function runFullSync() {
   const apiKey = getProp('ZOTERO_API_KEY');
-  const groupId = getProp('ZOTERO_GROUP_ID');
-  const items = fetchAllZoteroItems(apiKey, groupId);
+  const groupId = getProp('ZOTERO_GROUP_ID', true);
+  if (!groupId) {
+    SpreadsheetApp.getUi().alert('No ZOTERO_GROUP_ID set — skipping sync. Use "Browse & import references..." to add items manually.');
+    return;
+  }
+  const items = fetchAllZoteroItems(apiKey, 'groups', groupId);
   const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
 
   sheets.forEach(function (sheet) {
@@ -260,7 +261,7 @@ function runFullSync() {
     headers.forEach(function (h) { if (h === 'Zotero Key') hasKey = true; });
     if (!hasKey) return;
 
-    syncItemsToSheet(sheet, items, apiKey, groupId);
+    syncItemsToSheet(sheet, items, apiKey, libraryType, libraryId);
     createDocsForNewRows(sheet);
     syncDocsToSheet(sheet);
     try { ensureReferencesTable(sheet); } catch (e) { Logger.log('Skipped Table refresh: ' + e); }
@@ -269,14 +270,14 @@ function runFullSync() {
   SpreadsheetApp.getUi().alert('Sync complete -- all sheets updated.');
 }
 
-function syncItemsToSheet(sheet, items, apiKey, groupId) {
+function syncItemsToSheet(sheet, items, apiKey, libraryType, libraryId) {
   const colIndex = getColumnIndexMap(sheet);
   const existing = getExistingRowsByZoteroKey(sheet, colIndex);
   const rowsToAppend = [];
 
   items.forEach(function (item) {
     if (!item.data || item.data.itemType === 'attachment' || item.data.itemType === 'note') return;
-    const rowValues = buildRowFromZoteroItem(item, apiKey, groupId);
+    const rowValues = buildRowFromZoteroItem(item, apiKey, libraryType, libraryId);
     const key = item.key;
     if (existing[key]) {
       writeZoteroColumnsToRow(sheet, existing[key].rowNum, colIndex, rowValues);
@@ -709,7 +710,7 @@ function addZoteroItemToSheet(item, keyPrefix, uriOverride) {
     return { status: 'duplicate' };
   }
 
-  const values = buildRowFromZoteroItem(item, null, null);
+  const values = buildRowFromZoteroItem(item, null, null, null);
   values['Zotero Key'] = zoteroKey;
   values['Zotero URI'] = uriOverride;
 
@@ -726,18 +727,22 @@ function addZoteroItemToSheet(item, keyPrefix, uriOverride) {
 
 function syncZoteroToSheet() {
   const apiKey = getProp('ZOTERO_API_KEY');
-  const groupId = getProp('ZOTERO_GROUP_ID');
-  const items = fetchAllZoteroItems(apiKey, groupId);
-  syncItemsToSheet(getSheet(), items, apiKey, groupId);
+  const groupId = getProp('ZOTERO_GROUP_ID', true);
+  if (!groupId) {
+    SpreadsheetApp.getUi().alert('No ZOTERO_GROUP_ID set — skipping sync. Use "Browse & import references..." to add items manually.');
+    return;
+  }
+  const items = fetchAllZoteroItems(apiKey, 'groups', groupId);
+  syncItemsToSheet(getSheet(), items, apiKey, 'groups', groupId);
 }
 
-function fetchAllZoteroItems(apiKey, groupId) {
+function fetchAllZoteroItems(apiKey, libraryType, libraryId) {
   const items = [];
   const pageSize = 100;
   let start = 0;
   while (true) {
     const url =
-      'https://api.zotero.org/groups/' + groupId + '/items/top' +
+      'https://api.zotero.org/' + libraryType + '/' + libraryId + '/items/top' +
       '?format=json&include=data,bib,citation&style=' + CITATION_STYLE +
       '&limit=' + pageSize + '&start=' + start;
     const res = UrlFetchApp.fetch(url, {
@@ -755,7 +760,7 @@ function fetchAllZoteroItems(apiKey, groupId) {
   return items;
 }
 
-function buildRowFromZoteroItem(item, apiKey, groupId) {
+function buildRowFromZoteroItem(item, apiKey, libraryType, libraryId) {
   const d = item.data;
   const authors = (d.creators || [])
     .filter(function (c) { return c.creatorType === 'author'; })
@@ -792,7 +797,9 @@ function buildRowFromZoteroItem(item, apiKey, groupId) {
     'Full Citation': bib,
     'Tags': (d.tags || []).map(function (t) { return t.tag; }).join(', '),
     'Collections': (d.collections || []).join(', '),
-    'Zotero URI': 'https://www.zotero.org/groups/' + groupId + '/items/' + item.key,
+    'Zotero URI': libraryType && libraryId
+      ? 'https://www.zotero.org/' + libraryType + '/' + libraryId + '/items/' + item.key
+      : '',
   };
 }
 
